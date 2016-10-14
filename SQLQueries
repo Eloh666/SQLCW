@@ -1,0 +1,96 @@
+# QUESTION 1
+
+SELECT
+  DISTINCT
+  guestX.first_name AS Name,
+  guestX.last_name AS Surname
+FROM booking AS bookingX JOIN guest AS guestX ON bookingX.guest_id = guestX.id
+WHERE guestX.last_name IN (
+  SELECT
+    guestY.last_name
+  FROM booking AS bookingY JOIN guest AS guestY ON bookingY.guest_id = guestY.id
+  WHERE bookingX.guest_id <> bookingY.guest_id
+        AND
+        (bookingX.booking_date <= DATE_ADD(bookingY.booking_date, INTERVAL bookingY.nights - 1 DAY))
+        AND
+        (DATE_ADD(bookingX.booking_date, INTERVAL bookingX.nights - 1 DAY) >= bookingY.booking_date)
+        AND
+        guestX.last_name = guestY.last_name
+
+)
+ORDER BY guestX.last_name
+
+
+# QUESTION 2
+
+SELECT
+  DISTINCT
+  MAX(CASE WHEN checkoutDay = 'Monday' THEN dayAmount END) AS Monday,
+  MAX(CASE WHEN checkoutDay = 'Tuesday' THEN dayAmount END) AS Tuesday,
+  MAX(CASE WHEN checkoutDay = 'Wednesday' THEN dayAmount END) AS Wednesday,
+  MAX(CASE WHEN checkoutDay = 'Thursday' THEN dayAmount END) AS Thursday,
+  MAX(CASE WHEN checkoutDay = 'Friday' THEN dayAmount END) AS Friday,
+  MAX(CASE WHEN checkoutDay = 'Saturday' THEN dayAmount END) AS Saturday,
+  MAX(CASE WHEN checkoutDay = 'Sunday' THEN dayAmount END) AS Sunday,
+  MAX(CASE WHEN floor = 1 THEN floorAmount END) AS Floor_1,
+  MAX(CASE WHEN floor = 2 THEN floorAmount END) AS Floor_2,
+  MAX(CASE WHEN floor = 3 THEN floorAmount END) AS Floor_3
+FROM (
+  SELECT DAYNAME(DATE_ADD(booking_date, INTERVAL nights - 1 DAY)) AS checkoutDay,
+  COUNT(*) AS dayAmount
+FROM booking
+WHERE DATE_ADD(booking_date, INTERVAL nights - 1 DAY) > '2016-11-14'
+GROUP BY DAYNAME(DATE_ADD(booking_date, INTERVAL nights - 1 DAY))
+) AS checkoutByDay,
+(
+  SELECT
+  CASE
+    WHEN room_no < 200 THEN 1
+    WHEN room_no < 300 THEN 2
+    ELSE 3
+  END AS floor,
+  COUNT(*) AS floorAmount
+FROM booking
+WHERE DATE_ADD(booking_date, INTERVAL nights - 1 DAY) > '2016-11-14'
+GROUP BY floor
+) AS checkoutByFloor
+
+
+# QUESTION 3
+
+SELECT
+  calendar.i,
+  CASE
+  WHEN last_name IS NULL THEN 'Not Booked' ELSE last_name
+  END AS Surname
+FROM calendar
+  LEFT JOIN (
+              SELECT
+                booking_date AS startDate,
+                DATE_ADD(booking_date, INTERVAL nights - 1 DAY) AS endDate,
+                room_no,
+                guest_id
+              FROM booking
+              WHERE room_no = 207
+            )
+    AS expandedBooking ON calendar.i BETWEEN expandedBooking.startDate AND expandedBooking.endDate
+  LEFT JOIN guest ON expandedBooking.guest_id = guest.id
+WHERE calendar.i BETWEEN '2016-11-21' AND DATE_ADD('2016-11-21', INTERVAL 6 DAY)
+
+
+# QUESTION 5
+
+SELECT
+  calendar.i,
+  COALESCE(
+      (SELECT
+         sum((extra.amount + rate.amount)) AS totalDue
+       FROM booking
+         JOIN rate ON booking.room_type_requested = rate.room_type AND booking.occupants = rate.occupancy
+         JOIN extra ON extra.booking_id = booking.booking_id
+       WHERE DATE_ADD(booking_date, INTERVAL nights - 1 DAY) BETWEEN DATE_ADD(calendar.i, INTERVAL -6 DAY) AND calendar.i),
+      0
+  ) AS incomeToDate
+FROM calendar
+WHERE DAYNAME(calendar.i) = 'Thursday' AND MONTH(calendar.i) = 11 AND YEAR(calendar.i) = 2016
+ORDER BY calendar.i
