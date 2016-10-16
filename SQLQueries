@@ -78,6 +78,38 @@ FROM calendar
 WHERE calendar.i BETWEEN '2016-11-21' AND DATE_ADD('2016-11-21', INTERVAL 6 DAY)
 
 
+# QUESTION 4
+
+SET @bookingLength = 7, @startDate = '2016-11-03', @endDate = '2016-12-19';
+SELECT
+  edgeCaseBooking.room_no,
+  edgeCaseBooking.availStart,
+  CASE WHEN edgeCaseBooking.availEnd IS NULL THEN @endDate ELSE edgeCaseBooking.availEnd END AS availEnd
+FROM (
+       SELECT
+         extendedBooking.room_no,
+         room_type_requested,
+         DATE_ADD(extendedBooking.booking_date, INTERVAL extendedBooking.nights DAY) AS availStart,
+         (
+           SELECT MIN(secondBooking.booking_date)
+           FROM booking secondBooking
+           WHERE secondBooking.room_no = extendedBooking.room_no
+                 AND secondBooking.booking_date > extendedBooking.booking_date
+         ) AS availEnd
+       FROM booking AS extendedBooking
+       WHERE extendedBooking.room_type_requested = 'double'
+     ) AS edgeCaseBooking
+HAVING DATEDIFF(availEnd, availStart) >= @bookingLength
+       AND
+       (
+         (availEnd >= @endDate AND availStart <= @startDate)
+         OR
+         (availStart >= @startDate AND availStart + INTERVAL @bookingLength DAY <= @endDate)
+         OR
+         (availStart <= @startDate AND availEnd >= @startDate + INTERVAL @bookingLength DAY )
+       )
+
+
 # QUESTION 5
 
 SELECT
