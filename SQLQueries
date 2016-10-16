@@ -104,10 +104,12 @@ HAVING DATEDIFF(availEnd, availStart) >= @bookingLength
        (
          (availEnd >= @endDate AND availStart <= @startDate)
          OR
-         (availStart >= @startDate AND availStart + INTERVAL @bookingLength DAY <= @endDate)
+         (availStart >= @startDate AND DATE_ADD(availStart, INTERVAL @bookingLength - 1 DAY) <= @endDate)
          OR
-         (availStart <= @startDate AND availEnd >= @startDate + INTERVAL @bookingLength DAY )
+         (availStart <= @startDate AND availEnd >= DATE_ADD(@startDate, INTERVAL @bookingLength - 1 DAY) )
        )
+ORDER BY availStart
+LIMIT 2
 
 
 # QUESTION 5
