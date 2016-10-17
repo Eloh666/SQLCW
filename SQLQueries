@@ -24,36 +24,23 @@ ORDER BY guestX.last_name
 # QUESTION 2
 
 SELECT
-  DISTINCT
-  MAX(CASE WHEN checkoutDay = 'Monday' THEN dayAmount END) AS Monday,
-  MAX(CASE WHEN checkoutDay = 'Tuesday' THEN dayAmount END) AS Tuesday,
-  MAX(CASE WHEN checkoutDay = 'Wednesday' THEN dayAmount END) AS Wednesday,
-  MAX(CASE WHEN checkoutDay = 'Thursday' THEN dayAmount END) AS Thursday,
-  MAX(CASE WHEN checkoutDay = 'Friday' THEN dayAmount END) AS Friday,
-  MAX(CASE WHEN checkoutDay = 'Saturday' THEN dayAmount END) AS Saturday,
-  MAX(CASE WHEN checkoutDay = 'Sunday' THEN dayAmount END) AS Sunday,
-  MAX(CASE WHEN floor = 1 THEN floorAmount END) AS Floor_1,
-  MAX(CASE WHEN floor = 2 THEN floorAmount END) AS Floor_2,
-  MAX(CASE WHEN floor = 3 THEN floorAmount END) AS Floor_3
+  checkoutDay,
+  SUM(CASE WHEN floor = 1 THEN dayAmount END) AS Floor_1,
+  SUM(CASE WHEN floor = 2 THEN dayAmount END) AS Floor_2,
+  SUM(CASE WHEN floor = 3 THEN dayAmount END) AS Floor_3
 FROM (
-  SELECT DAYNAME(DATE_ADD(booking_date, INTERVAL nights - 1 DAY)) AS checkoutDay,
-  COUNT(*) AS dayAmount
-FROM booking
-WHERE DATE_ADD(booking_date, INTERVAL nights - 1 DAY) > '2016-11-14'
-GROUP BY DAYNAME(DATE_ADD(booking_date, INTERVAL nights - 1 DAY))
-) AS checkoutByDay,
-(
-  SELECT
-  CASE
+  SELECT DAYNAME(DATE_ADD(booking_date, INTERVAL nights DAY)) AS checkoutDay,
+    CASE
     WHEN room_no < 200 THEN 1
-    WHEN room_no < 300 THEN 2
+    WHEN room_no < 300 AND  room_no > 199 THEN 2
     ELSE 3
   END AS floor,
-  COUNT(*) AS floorAmount
+  COUNT(*) AS dayAmount
 FROM booking
-WHERE DATE_ADD(booking_date, INTERVAL nights - 1 DAY) > '2016-11-14'
-GROUP BY floor
-) AS checkoutByFloor
+WHERE DATE_ADD(booking_date, INTERVAL nights DAY) BETWEEN '2016-11-14' AND DATE_ADD('2016-11-14', INTERVAL 6 DAY)
+GROUP BY DAYNAME(DATE_ADD(booking_date, INTERVAL nights DAY)), floor
+) AS amountByFloorAndDay
+GROUP BY checkoutDay
 
 
 # QUESTION 3
@@ -80,11 +67,10 @@ WHERE calendar.i BETWEEN '2016-11-21' AND DATE_ADD('2016-11-21', INTERVAL 6 DAY)
 
 # QUESTION 4
 
-SET @bookingLength = 7, @startDate = '2016-11-03', @endDate = '2016-12-19';
 SELECT
-  edgeCaseBooking.room_no,
-  edgeCaseBooking.availStart,
-  CASE WHEN edgeCaseBooking.availEnd IS NULL THEN @endDate ELSE edgeCaseBooking.availEnd END AS availEnd
+  edgeCaseBooking.room_no as room,
+  edgeCaseBooking.availStart as avail,
+  CASE WHEN edgeCaseBooking.availEnd IS NULL THEN '2016-12-19' ELSE edgeCaseBooking.availEnd END AS availEnd
 FROM (
        SELECT
          extendedBooking.room_no,
@@ -99,17 +85,15 @@ FROM (
        FROM booking AS extendedBooking
        WHERE extendedBooking.room_type_requested = 'double'
      ) AS edgeCaseBooking
-HAVING DATEDIFF(availEnd, availStart) >= @bookingLength
+HAVING DATEDIFF(availEnd, availStart) >= 7
        AND
        (
-         (availEnd >= @endDate AND availStart <= @startDate)
+         (availEnd >= '2016-12-19' AND availStart <= '2016-11-03')
          OR
-         (availStart >= @startDate AND DATE_ADD(availStart, INTERVAL @bookingLength - 1 DAY) <= @endDate)
+         (availStart >= '2016-11-03' AND DATE_ADD(availStart, INTERVAL 7 - 1 DAY) <= '2016-12-19')
          OR
-         (availStart <= @startDate AND availEnd >= DATE_ADD(@startDate, INTERVAL @bookingLength - 1 DAY) )
+         (availStart <= '2016-11-03' AND availEnd >= DATE_ADD('2016-11-03', INTERVAL 7 - 1 DAY) )
        )
-ORDER BY availStart
-LIMIT 2
 
 
 # QUESTION 5
@@ -118,11 +102,11 @@ SELECT
   calendar.i,
   COALESCE(
       (SELECT
-         sum((extra.amount + rate.amount)) AS totalDue
+         sum((extra.amount + (rate.amount * booking.nights))) AS totalDue
        FROM booking
          JOIN rate ON booking.room_type_requested = rate.room_type AND booking.occupants = rate.occupancy
          JOIN extra ON extra.booking_id = booking.booking_id
-       WHERE DATE_ADD(booking_date, INTERVAL nights - 1 DAY) BETWEEN DATE_ADD(calendar.i, INTERVAL -6 DAY) AND calendar.i),
+       WHERE DATE_ADD(booking_date, INTERVAL nights DAY) BETWEEN DATE_ADD(calendar.i, INTERVAL -6 DAY) AND calendar.i),
       0
   ) AS incomeToDate
 FROM calendar
