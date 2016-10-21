@@ -8,24 +8,30 @@ CREATE VIEW extendedBooking AS
 # QUESTION 11
 
 SELECT
-  DISTINCT
-  guestX.first_name AS Name,
-  guestX.last_name AS Surname
-FROM booking AS bookingX JOIN guest AS guestX ON bookingX.guest_id = guestX.id
-WHERE guestX.last_name IN (
-  SELECT
-    guestY.last_name
-  FROM booking AS bookingY JOIN guest AS guestY ON bookingY.guest_id = guestY.id
-  WHERE bookingX.guest_id <> bookingY.guest_id
-        AND
-        (bookingX.booking_date <= DATE_ADD(bookingY.booking_date, INTERVAL bookingY.nights - 1 DAY))
-        AND
-        (DATE_ADD(bookingX.booking_date, INTERVAL bookingX.nights - 1 DAY) >= bookingY.booking_date)
-        AND
-        guestX.last_name = guestY.last_name
+  Surname,
+  MIN(Name) AS First_Person,
+  MAX(Name) AS Second_Person
+FROM (
+       SELECT
+         DISTINCT
+         guestX.first_name AS Name,
+         guestX.last_name AS Surname
+       FROM booking AS bookingX JOIN guest AS guestX ON bookingX.guest_id = guestX.id
+       WHERE guestX.last_name IN (
+         SELECT
+           guestY.last_name
+         FROM booking AS bookingY JOIN guest AS guestY ON bookingY.guest_id = guestY.id
+         WHERE bookingX.guest_id <> bookingY.guest_id
+               AND
+               (bookingX.booking_date <= DATE_ADD(bookingY.booking_date, INTERVAL bookingY.nights - 1 DAY))
+               AND
+               (DATE_ADD(bookingX.booking_date, INTERVAL bookingX.nights - 1 DAY) >= bookingY.booking_date)
+               AND
+               guestX.last_name = guestY.last_name
 
-)
-ORDER BY guestX.last_name
+       )
+     ) AS NamesTable
+GROUP BY Surname
 
 
 # QUESTION 12
