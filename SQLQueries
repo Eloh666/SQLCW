@@ -1,4 +1,11 @@
-# QUESTION 1
+# View for the questions
+
+CREATE VIEW extendedBooking AS
+  SELECT *, DATE_ADD(booking_date, INTERVAL nights - 1 DAY) AS leave_date
+  FROM booking
+
+
+# QUESTION 11
 
 SELECT
   DISTINCT
@@ -21,7 +28,7 @@ WHERE guestX.last_name IN (
 ORDER BY guestX.last_name
 
 
-# QUESTION 2
+# QUESTION 12
 
 SELECT
   checkoutDay,
@@ -43,7 +50,7 @@ GROUP BY DAYNAME(DATE_ADD(booking_date, INTERVAL nights DAY)), floor
 GROUP BY checkoutDay
 
 
-# QUESTION 3
+# QUESTION 13
 
 SELECT
   calendar.i,
@@ -65,7 +72,7 @@ FROM calendar
 WHERE calendar.i BETWEEN '2016-11-21' AND DATE_ADD('2016-11-21', INTERVAL 6 DAY)
 
 
-# QUESTION 4
+# QUESTION 14
 
 SELECT
   edgeCaseBooking.room_no as room,
@@ -96,7 +103,7 @@ HAVING DATEDIFF(availEnd, availStart) >= 7
        )
 
 
-# QUESTION 5
+# QUESTION 15
 
 SELECT
   calendar.i,
