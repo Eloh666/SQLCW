@@ -1,36 +1,31 @@
 # View for the questions
 
 CREATE VIEW extendedBooking AS
-  SELECT *, DATE_ADD(booking_date, INTERVAL nights - 1 DAY) AS leave_date
+  SELECT *,
+  DATE_ADD(booking_date, INTERVAL nights - 1 DAY) AS leave_date,
+  DATE_ADD(booking_date, INTERVAL nights DAY) AS checkout_date
   FROM booking
 
 
 # QUESTION 11
 
 SELECT
-  Surname,
-  MIN(Name) AS First_Person,
-  MAX(Name) AS Second_Person
-FROM (
-       SELECT
-         DISTINCT
-         guestX.first_name AS Name,
-         guestX.last_name AS Surname
-       FROM booking AS bookingX JOIN guest AS guestX ON bookingX.guest_id = guestX.id
-       WHERE guestX.last_name IN (
-         SELECT
-           guestY.last_name
-         FROM booking AS bookingY JOIN guest AS guestY ON bookingY.guest_id = guestY.id
-         WHERE bookingX.guest_id <> bookingY.guest_id
-               AND
-               (bookingX.booking_date <= DATE_ADD(bookingY.booking_date, INTERVAL bookingY.nights - 1 DAY))
-               AND
-               (DATE_ADD(bookingX.booking_date, INTERVAL bookingX.nights - 1 DAY) >= bookingY.booking_date)
-               AND
-               guestX.last_name = guestY.last_name
-
-       )
-     ) AS NamesTable
+  guestX.last_name AS surname,
+  MIN(guestX.first_name) AS first_person,
+  MAX(guestX.first_name) AS second_person
+FROM extendedbooking AS bookingX JOIN guest AS guestX ON bookingX.guest_id = guestX.id
+WHERE guestX.last_name IN (
+  SELECT guestY.last_name
+  FROM extendedbooking AS bookingY
+    JOIN guest AS guestY ON bookingY.guest_id = guestY.id
+  WHERE bookingX.guest_id <> bookingY.guest_id
+        AND
+        (bookingX.booking_date <= bookingY.leave_date
+         AND
+         bookingX.leave_date >= bookingY.booking_date)
+        AND
+        guestX.last_name = guestY.last_name
+)
 GROUP BY Surname
 
 
@@ -42,16 +37,16 @@ SELECT
   SUM(CASE WHEN floor = 2 THEN dayAmount END) AS Floor_2,
   SUM(CASE WHEN floor = 3 THEN dayAmount END) AS Floor_3
 FROM (
-  SELECT DAYNAME(DATE_ADD(booking_date, INTERVAL nights DAY)) AS checkoutDay,
+  SELECT DAYNAME(checkout_date) AS checkoutDay,
     CASE
     WHEN room_no < 200 THEN 1
     WHEN room_no < 300 AND  room_no > 199 THEN 2
     ELSE 3
   END AS floor,
   COUNT(*) AS dayAmount
-FROM booking
-WHERE DATE_ADD(booking_date, INTERVAL nights DAY) BETWEEN '2016-11-14' AND DATE_ADD('2016-11-14', INTERVAL 6 DAY)
-GROUP BY DAYNAME(DATE_ADD(booking_date, INTERVAL nights DAY)), floor
+FROM extendedbooking
+WHERE checkout_date BETWEEN '2016-11-14' AND DATE_ADD('2016-11-14', INTERVAL 6 DAY)
+GROUP BY checkoutDay, floor
 ) AS amountByFloorAndDay
 GROUP BY checkoutDay
 
@@ -61,22 +56,18 @@ GROUP BY checkoutDay
 SELECT
   calendar.i,
   CASE
-  WHEN last_name IS NULL THEN 'Not Booked' ELSE last_name
+  WHEN last_name IS NULL THEN '--Available--' ELSE last_name
   END AS Surname
 FROM calendar
   LEFT JOIN (
               SELECT
-                booking_date AS startDate,
-                DATE_ADD(booking_date, INTERVAL nights - 1 DAY) AS endDate,
-                room_no,
-                guest_id
-              FROM booking
+                *
+              FROM extendedbooking
               WHERE room_no = 207
             )
-    AS expandedBooking ON calendar.i BETWEEN expandedBooking.startDate AND expandedBooking.endDate
+    AS expandedBooking ON calendar.i BETWEEN expandedBooking.booking_date AND expandedBooking.leave_date
   LEFT JOIN guest ON expandedBooking.guest_id = guest.id
 WHERE calendar.i BETWEEN '2016-11-21' AND DATE_ADD('2016-11-21', INTERVAL 6 DAY)
-
 
 # QUESTION 14
 
@@ -88,14 +79,14 @@ FROM (
        SELECT
          extendedBooking.room_no,
          room_type_requested,
-         DATE_ADD(extendedBooking.booking_date, INTERVAL extendedBooking.nights DAY) AS availStart,
+         checkout_date AS availStart,
          (
            SELECT MIN(secondBooking.booking_date)
            FROM booking secondBooking
            WHERE secondBooking.room_no = extendedBooking.room_no
                  AND secondBooking.booking_date > extendedBooking.booking_date
          ) AS availEnd
-       FROM booking AS extendedBooking
+       FROM extendedBooking
        WHERE extendedBooking.room_type_requested = 'double'
      ) AS edgeCaseBooking
 HAVING DATEDIFF(availEnd, availStart) >= 7
@@ -109,17 +100,18 @@ HAVING DATEDIFF(availEnd, availStart) >= 7
        )
 
 
+
 # QUESTION 15
 
 SELECT
   calendar.i,
   COALESCE(
       (SELECT
-         sum((extra.amount + (rate.amount * booking.nights))) AS totalDue
-       FROM booking
-         JOIN rate ON booking.room_type_requested = rate.room_type AND booking.occupants = rate.occupancy
-         JOIN extra ON extra.booking_id = booking.booking_id
-       WHERE DATE_ADD(booking_date, INTERVAL nights DAY) BETWEEN DATE_ADD(calendar.i, INTERVAL -6 DAY) AND calendar.i),
+         sum((extra.amount + (rate.amount * extendedBooking.nights))) AS totalDue
+       FROM extendedBooking
+         JOIN rate ON extendedBooking.room_type_requested = rate.room_type AND extendedBooking.occupants = rate.occupancy
+         JOIN extra ON extra.booking_id = extendedBooking.booking_id
+       WHERE checkout_date BETWEEN DATE_ADD(calendar.i, INTERVAL -6 DAY) AND calendar.i),
       0
   ) AS incomeToDate
 FROM calendar
