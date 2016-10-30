@@ -150,8 +150,10 @@ CREATE TABLE guesthouse.payments
     payment_date DATE,
     payment_method VARCHAR(16),
     booking_id INT NOT NULL,
+    extra_id INT NULL,
     amount INT NOT NULL,
     FOREIGN KEY (booking_id) REFERENCES booking(booking_id)
+    FOREIGN KEY (extra_id) REFERENCES extra(extra_id)
 );
 CREATE UNIQUE INDEX payments_id_uindex ON guesthouse.payments (id);
 
@@ -160,13 +162,14 @@ CREATE UNIQUE INDEX payments_id_uindex ON guesthouse.payments (id);
 CREATE TABLE guesthouse.VAT
 (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    vat_percentage INT NOT NULL,
+    vat_percentage DOUBLE NOT NULL,
     active_from DATE NOT NULL,
     active_until DATE NULL
 );
 
 INSERT INTO vat (vat_percentage, active_from, active_until)
-VALUES (20, '2011-01-04', null)
+VALUES (17.5, '2010-01-01', '2011-01-03'),
+       (20, '2011-01-04', null)
 
 ------------------------------------------------------------------------------------------------------------------------
 
@@ -232,6 +235,39 @@ FROM payments
 WHERE payment_method = 'Cash'
 AND payment_date = '___INSERT DATE HERE___'
 
+
+------------------------------------------------------------------------------------------------------------------------
+
+CREATE VIEW extras_vat AS
+SELECT
+    extra.booking_id,
+    SUM(CASE WHEN attracts_vat = TRUE then amount - (amount / ( 100 + vat_percentage)) * vat.vat_percentage ELSE amount END) AS extras_amount_pre_vat,
+    SUM(CASE WHEN attracts_vat = TRUE then (amount / ( 100 + vat_percentage)) * vat.vat_percentage ELSE 0 END)  AS extras_payable_vat,
+    SUM(amount) AS extras_full_amount
+  FROM extra
+  JOIN extra_services ON extra.service_id = extra_services.id
+  JOIN booking ON booking.booking_id = extra.booking_id
+  JOIN vat ON (booking.booking_date BETWEEN active_from AND active_until OR booking.booking_date >= active_from AND active_until IS NULL)
+  GROUP BY extra.booking_id
+
+
+CREATE VIEW rooms_vat as
+  SELECT
+    booking_id,
+    SUM(rate.amount * booking.nights) - (SUM(rate.amount * booking.nights) / ( 100 + vat_percentage)) * vat.vat_percentage AS room_amount_pre_vat,
+    (SUM(rate.amount * booking.nights) / ( 100 + vat_percentage)) * vat.vat_percentage AS room_payable_vat,
+    SUM(rate.amount * booking.nights) AS room_full_amount
+  FROM booking
+    JOIN rate ON booking.room_type_requested = rate.room_type AND booking.occupants = rate.occupancy
+    JOIN vat ON (booking.booking_date BETWEEN active_from AND active_until OR booking.booking_date >= active_from AND active_until IS NULL)
+  GROUP BY booking.booking_id
+
+
+SELECT
+  *
+FROM extras_vat
+JOIN rooms_vat ON rooms_vat.booking_id = extras_vat.booking_id
+WHERE extras_vat.booking_id = 5359
 
 
 
