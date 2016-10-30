@@ -103,17 +103,135 @@ HAVING DATEDIFF(availEnd, availStart) >= 7
 
 # QUESTION 15
 
+CREATE VIEW room_costs as
+  SELECT
+    booking_id,
+    SUM(rate.amount * extendedBooking.nights) AS roomCost
+  FROM extendedBooking
+    JOIN rate ON extendedBooking.room_type_requested = rate.room_type AND extendedBooking.occupants = rate.occupancy
+  GROUP BY extendedbooking.booking_id
+
+CREATE VIEW extras_costs as
+  SELECT
+    extendedbooking.booking_id,
+    SUM(amount) extras
+  FROM extendedBooking
+    JOIN extra ON extra.booking_id = extendedBooking.booking_id
+  GROUP BY extendedbooking.booking_id
+
+
 SELECT
   calendar.i,
   COALESCE(
       (SELECT
-         sum((extra.amount + (rate.amount * extendedBooking.nights))) AS totalDue
-       FROM extendedBooking
-         JOIN rate ON extendedBooking.room_type_requested = rate.room_type AND extendedBooking.occupants = rate.occupancy
-         JOIN extra ON extra.booking_id = extendedBooking.booking_id
+         sum(extras + roomCost)
+       FROM extendedbooking
+         JOIN extras_costs ON extras_costs.booking_id = extendedbooking.booking_id
+         JOIN room_costs ON room_costs.booking_id = extendedbooking.booking_id
        WHERE checkout_date BETWEEN DATE_ADD(calendar.i, INTERVAL -6 DAY) AND calendar.i),
       0
   ) AS incomeToDate
 FROM calendar
 WHERE DAYNAME(calendar.i) = 'Thursday' AND MONTH(calendar.i) = 11 AND YEAR(calendar.i) = 2016
 ORDER BY calendar.i
+
+DROP VIEW guesthouse.room_costs RESTRICT;
+DROP VIEW guesthouse.extras_costs RESTRICT;
+
+
+
+
+
+------------------------------------------------------------------------------------------------------------------------
+
+CREATE TABLE guesthouse.payments
+(
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    payment_date DATE,
+    payment_method VARCHAR(16),
+    booking_id INT NOT NULL,
+    amount INT NOT NULL,
+    FOREIGN KEY (booking_id) REFERENCES booking(booking_id)
+);
+CREATE UNIQUE INDEX payments_id_uindex ON guesthouse.payments (id);
+
+------------------------------------------------------------------------------------------------------------------------
+
+CREATE TABLE guesthouse.VAT
+(
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    vat_percentage INT NOT NULL,
+    active_from DATE NOT NULL,
+    active_until DATE NULL
+);
+
+INSERT INTO vat (vat_percentage, active_from, active_until)
+VALUES (20, '2011-01-04', null)
+
+------------------------------------------------------------------------------------------------------------------------
+
+ALTER TABLE guesthouse.extra ADD service_id INT NULL
+
+CREATE TABLE guesthouse.extra_services
+(
+    id INT PRIMARY KEY NOT NULL AUTO_INCREMENT,
+    name VARCHAR(16) NOT NULL,
+    attracts_vat BOOL NOT NULL
+);
+
+INSERT INTO extra_services (name, attracts_vat)
+    VALUES ('Breakfast', FALSE ), ('Phone Calls', TRUE)
+
+UPDATE extra SET service_id = (SELECT id FROM extra_services WHERE name = 'Breakfast')
+WHERE extra.description LIKE 'Breakfast%'
+
+UPDATE extra SET service_id = (SELECT id FROM extra_services WHERE name = 'Phone Calls')
+WHERE extra.description LIKE 'Phone%'
+
+------------------------------------------------------------------------------------------------------------------------
+
+INSERT INTO guesthouse.payments (payment_date, payment_method, booking_id, amount)
+VALUES ('2016-12-11', 'Debit Card', 5360, 216),
+  ('2016-11-20', 'BACS', 5359, 288),
+  ((SELECT checkout_date
+    FROM extendedBooking
+    WHERE booking_id = 5359), 'Cash', 5359, 49.06)
+
+------------------------------------------------------------------------------------------------------------------------
+# It must be possible to answer a guest’s query about how much they owe at any time.
+
+SELECT
+  (
+    SELECT
+      SUM(rate.amount * nights) + SUM(extrasCost.extras) AS totalDue
+    FROM extendedBooking
+      JOIN rate ON extendedBooking.room_type_requested = rate.room_type AND extendedBooking.occupants = rate.occupancy
+      JOIN (SELECT
+              extendedbooking.booking_id,
+              SUM(amount) extras
+            FROM extendedBooking
+              JOIN extra ON extra.booking_id = extendedBooking.booking_id
+            GROUP BY extendedbooking.booking_id)
+        AS extrasCost ON extrasCost.booking_id = extendedBooking.booking_id
+    WHERE extrasCost.booking_id = 5359
+    GROUP BY extendedbooking.booking_id
+  ) - SUM(amount) dueToDate
+FROM payments
+WHERE payment_date < '2016-11-25'
+      AND booking_id = 5359
+
+# It must be possible to view all payments made including the date they were made, the amount and the method of payment used.
+
+SELECT *
+FROM payments
+
+# It must be possible to find out how much money has been taken in cash on any given day.
+
+SELECT SUM(amount)
+FROM payments
+WHERE payment_method = 'Cash'
+AND payment_date = '___INSERT DATE HERE___'
+
+
+
+
